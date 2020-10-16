@@ -6489,6 +6489,12 @@ drop_create_field:
                             ER_BAD_FIELD_ERROR,
                             ER_THD(thd, ER_BAD_FIELD_ERROR),
                             sql_field->change.str, table->s->table_name.str);
+        /*
+          if thread is killed (for example because local memory used execeeds
+          maximum session memory used), return TRUE and do rollback (done later).
+        */
+        if (thd->killed)
+          DBUG_RETURN(true);
         it.remove();
         if (alter_info->create_list.is_empty())
         {
