@@ -2281,11 +2281,14 @@ func_exit:
 	/* Make sense of these three possible locations.
 	First, bail out if no tablespace files were found. */
 	if (valid_tablespaces_found == 0) {
-		os_file_get_last_error(true);
-		sql_print_error("InnoDB: Could not find a valid tablespace"
-				" file for %.*s. %s",
-				static_cast<int>(name.size()), name.data(),
-				TROUBLESHOOT_DATADICT_MSG);
+		if (!dict_suppress_missing_file_warning(path_in) ||
+			IF_WIN(GetLastError() != ERROR_FILE_NOT_FOUND, errno != ENOENT)) {
+				os_file_get_last_error(true);
+				sql_print_error("InnoDB: Could not find a valid"
+					" tablespace file for %.*s. %s",
+					static_cast<int>(name.size()), name.data(),
+					TROUBLESHOOT_DATADICT_MSG);
+		}
 		goto corrupted;
 	}
 	if (!validate) {

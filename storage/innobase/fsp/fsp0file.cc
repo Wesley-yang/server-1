@@ -91,7 +91,7 @@ Datafile::open_read_only(bool strict)
 		return(DB_SUCCESS);
 	}
 
-	if (strict) {
+	if (strict && !dict_suppress_missing_file_warning(m_filepath)){
 		m_last_os_error = os_file_get_last_error(true);
 		ib::error() << "Cannot open datafile for read-only: '"
 			<< m_filepath << "' OS error: " << m_last_os_error;

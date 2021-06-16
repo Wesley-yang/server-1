@@ -254,3 +254,100 @@ void trx_t::commit(std::vector<pfs_os_file_t> &deleted)
   }
   commit_cleanup();
 }
+
+#include "fts0opt.h"
+#include "log.h"
+#include "lock0lock.h"
+void drop_garbage_tables_for_mariabackup()
+{
+  btr_pcur_t pcur;
+  mtr_t mtr;
+  trx_t *trx= trx_create();
+
+  mtr.start();
+  btr_pcur_open_at_index_side(true, dict_sys.sys_tables->indexes.start,
+                              BTR_SEARCH_LEAF, &pcur, true, 0, &mtr);
+  for (;;)
+  {
+    btr_pcur_move_to_next_user_rec(&pcur, &mtr);
+
+    if (!btr_pcur_is_on_user_rec(&pcur))
+      break;
+
+    const rec_t *rec= btr_pcur_get_rec(&pcur);
+    if (rec_get_deleted_flag(rec, 0))
+      continue;
+
+    static_assert(DICT_FLD__SYS_TABLES__NAME == 0, "compatibility");
+    size_t len;
+    if (rec_get_1byte_offs_flag(rec))
+    {
+      len= rec_1_get_field_end_info(rec, 0);
+      if (len & REC_1BYTE_SQL_NULL_MASK)
+        continue; /* corrupted SYS_TABLES.NAME */
+    }
+    else
+    {
+      len= rec_2_get_field_end_info(rec, 0);
+      static_assert(REC_2BYTE_EXTERN_MASK == 16384, "compatibility");
+      if (len >= REC_2BYTE_EXTERN_MASK)
+        continue; /* corrupted SYS_TABLES.NAME */
+    }
+
+    constexpr size_t psize= sizeof GARBAGE_FILE_PREFIX;
+    if (len <= psize)
+      continue;
+    if (const char *f= static_cast<const char*>(memchr(rec, '/', len - psize)))
+    {
+      if (memcmp(f + 1, GARBAGE_FILE_PREFIX,
+                 (sizeof GARBAGE_FILE_PREFIX) - 1))
+        continue;
+    }
+    else
+      continue;
+
+    btr_pcur_store_position(&pcur, &mtr);
+    btr_pcur_commit_specify_mtr(&pcur, &mtr);
+
+    trx_start_for_ddl(trx);
+    std::vector<pfs_os_file_t> deleted;
+    row_mysql_lock_data_dictionary(trx);
+    dberr_t err= DB_TABLE_NOT_FOUND;
+
+    if (dict_table_t *table= dict_sys.load_table
+        ({reinterpret_cast<const char*>(pcur.old_rec), len},
+         DICT_ERR_IGNORE_DROP))
+    {
+      table->acquire();
+      err= lock_table_for_trx(table, trx, LOCK_X);
+      if (err == DB_SUCCESS &&
+          (table->flags2 & (DICT_TF2_FTS_HAS_DOC_ID | DICT_TF2_FTS)))
+        err= fts_lock_tables(trx, *table);
+      table->release();
+
+      if (err == DB_SUCCESS)
+        err= trx->drop_table(*table);
+      if (err != DB_SUCCESS)
+        goto fail;
+      trx->commit(deleted);
+    }
+    else
+    {
+fail:
+      trx->rollback();
+      sql_print_error("cannot drop %.*s: %s",
+                      static_cast<int>(len), pcur.old_rec, ut_strerr(err));
+    }
+
+    row_mysql_unlock_data_dictionary(trx);
+    for (pfs_os_file_t d : deleted)
+      os_file_close(d);
+
+    mtr.start();
+    btr_pcur_restore_position(BTR_SEARCH_LEAF, &pcur, &mtr);
+  }
+
+  btr_pcur_close(&pcur);
+  mtr.commit();
+  trx->free();
+}

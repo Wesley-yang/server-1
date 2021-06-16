@@ -892,8 +892,9 @@ static ulint dict_check_sys_tables()
 			    false,
 			    FIL_TYPE_TABLESPACE,
 			    space_id, dict_tf_to_fsp_flags(flags),
-			    name, filepath)) {
-			sql_print_warning("InnoDB: Ignoring tablespace for"
+			    name, filepath) &&
+			    !dict_suppress_missing_file_warning(filepath)) {
+				sql_print_warning("InnoDB: Ignoring tablespace for"
 					  " %.*s because it"
 					  " could not be opened.",
 					  static_cast<int>(name.size()),

@@ -1954,6 +1954,8 @@ static int innodb_check_version(handlerton *hton, const char *path,
     DBUG_RETURN(2);
 }
 
+extern void drop_garbage_tables_for_mariabackup();
+
 static void innodb_ddl_recovery_done(handlerton*)
 {
   ut_ad(!ddl_recovery_done);
@@ -1961,6 +1963,8 @@ static void innodb_ddl_recovery_done(handlerton*)
   if (!srv_read_only_mode && srv_operation == SRV_OPERATION_NORMAL &&
       srv_force_recovery < SRV_FORCE_NO_BACKGROUND)
   {
+    if (srv_start_after_prepare)
+      drop_garbage_tables_for_mariabackup();
     srv_init_purge_tasks();
     purge_sys.coordinator_startup();
     srv_wake_purge_thread_if_not_active();

@@ -1641,6 +1641,14 @@ public:
   dberr_t create_or_check_sys_tables();
 };
 
+#define GARBAGE_FILE_PREFIX "#sql"
+static inline bool dict_suppress_missing_file_warning(const char *name)
+{
+  return
+   srv_operation == SRV_OPERATION_NORMAL &&
+   srv_start_after_prepare && name && strstr(name, "/" GARBAGE_FILE_PREFIX);
+}
+
 /** the data dictionary cache */
 extern dict_sys_t	dict_sys;
 
