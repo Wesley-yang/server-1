@@ -18,13 +18,13 @@ set -e
 export DEB_BUILD_OPTIONS="nocheck $DEB_BUILD_OPTIONS"
 
 # Take the files and part of control from MCS directory
-if [[ -d storage/columnstore/columnstore/debian ]]
+if [[ -d storage/columnstore/columnstore/debianXXX ]]
 then
   cp -v storage/columnstore/columnstore/debian/mariadb-plugin-columnstore.* debian/
   echo >> debian/control
   cat storage/columnstore/columnstore/debian/control >> debian/control
 
-  # ColumnStore is explcitly disabled in the native build, so allow it now
+  # ColumnStore is explicitly disabled in the native build, so allow it now
   # when build it when triggered by autobake-deb.sh
   sed '/-DPLUGIN_COLUMNSTORE=NO/d' -i debian/rules
 fi
@@ -57,7 +57,7 @@ then
   sed "/Package: mariadb-plugin-rocksdb/,/^$/d" -i debian/control
   sed "/Package: mariadb-plugin-spider/,/^$/d" -i debian/control
   sed "/Package: mariadb-plugin-oqgraph/,/^$/d" -i debian/control
-  sed "/ha_sphinx.so/d" -i debian/mariadb-server-10.6.install
+  sed "/ha_sphinx.so/d" -i debian/mariadb-server-10.7.install
   sed "/Package: libmariadbd19/,/^$/d" -i debian/control
   sed "/Package: libmariadbd-dev/,/^$/d" -i debian/control
 fi
